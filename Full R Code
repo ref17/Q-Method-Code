@@ -1,0 +1,198 @@
+#STEP ONE, set working directory to data source file
+
+#STEP TWO, open the qmethod package 
+library(qmethod)
+
+#STEP THREE, import data
+mydata <- read.csv("qmethod-data for analysis.csv")
+
+#STEP FOUR, set row names and then delete the first column to ensure matrix is only numerical data
+row.names(mydata) <- mydata[ ,1]
+mydata[ ,1] <- NULL
+
+#STEP FIVE, explore correlations between Q sorts by making correlation matrix
+cor(mydata) 
+write.table(cor(mydata),"correlation.csv" ,sep=',') #save results in csv file, swap out first piece of parenthetical to save other results
+
+#STEP SIX, run the analysis and explore results - I ran the following steps repeatedly using different numbers of factors, starting with 7, and working my way down to 3.
+# Run the analysis
+# Create an object called 'results', and put the output 
+# of the function 'qmethod()' into this object
+# (replace the number of factor 'nfactors' as necessary)
+# package auto runs PCA extraction, varimax rotation, automatic flagging, and pearson correlations
+results <- qmethod(mydata, nfactors = 7)
+#Explore results
+round(results$loa, digits = 2) # See the factor loadings
+results #full details of all results
+summary(results) #shows summary of how statements load onto each factor, variance, EVs, standard error
+results$flag # See the flagged Q-sorts: those indicating 'TRUE'
+loa.and.flags(results) #See the table of factor loadings with an indication of flags
+write.table(loa.and.flags(results),"PCA7 loadings and flags.csv" ,sep=',') #save results in csv file, swap out first piece of parenthetical to save other results
+results$f_char$characteristics #Column 'eigenvals': eigenvalues, #Column 'expl_var':percentage of explained variability, #Column 'nload': number of Q-sorts flagged
+results$zsc #see z scores for each factor and statement
+results$zsc_n #see factor scores
+results$f_char$cor_zsc #see matrix of correlation between factor z scores
+results$f_char$sd_dif #see standard error of differences between factors
+plot(results) #plots z scores
+#repeat all of the following with 'nfactors' set to different numbers of factors to determine number of factors to retain
+#A NOTE ON FLAGGING
+#qmethod uses the qflag function for automatic flagging, which is based on a p-value of 0.05
+1.96*(1/sqrt(48)) #calculates the significant factor loading at 0.05 significance level, saved that variable as "pvalue05factorloading"
+round(pvalue05factorloading, digits = 2) #rounds factor significance to 2 digits
+2.58*(1/sqrt(48)) #calculates the significant factor loading at 0.01 significance level, saved that variable as "pvalue01factorloading"
+round(pvalue01factorloading, digits = 2) #rounds factor significance to 2 digits
+#Watts and Stenner suggest using a 0.01 significance level, but qmethod uses 0.05; need to decide if I'll manually flag for 0.01, or use qmethod's 0.05
+#In order to reduce confounded factor loadings, I chose to manually flag loadings at 0.5 or above (rather than 0.38, which corresponds to a 0.01 significance level). Process for manual flagging is outlined below 
+
+#STEP SEVEN, run the analysis with centroid extraction
+# Run the analysis using centroid factor extraction instead of PCA:
+resultscentroid <- qmethod(mydata, nfactors = 7, extraction="centroid", rotation="varimax")
+summary(resultscentroid) #see summary of results
+loa.and.flags(resultscentroid) #see loadings and flags, then repeat Step Seven steps to explore other results
+#compare PCA and centroid results, looking for which explains the highest variance
+
+#STEP EIGHT, deciding how many factors to extract
+#first option: Scree Test (note: works only on PCAs); results appear to suggest 3 factors, but that is fewer than all other rules suggest
+screeplot(prcomp(mydata), main = "Screeplot of unrotated factors", 
+          type = "l")
+#second option: 1 factor for every 6-8 participants (per Watts and Stenner 2012) - for this study would mean 5-7 factors
+#third option: Magic number 7 (per Brown and Watts and Stenner) - used this as a starting point, but other methods suggested extracting fewer 
+#fourth option: Keep factors with 2 or more significant sorts
+#fifth option: Kaiser-Guttman Criterion: keep factors with eigenvalues of 1 or above (for this study would mean keeping all 7)
+#sixth option: Humphrey's Rule: a factor is significant if the cross-product of its two highest loadings (ignoring +/-) exceeds twice the standard error
+StandardError<-1/sqrt(48)
+StandardError*2
+  #Standard error = 1/square root of # of items in Q set, so 1/(square root48), is 0.1443, or 0.15.Twice that is 0.3
+  #So, for factor 7 (most questionable based on EV and variance), the cross-product of the two highest loadings are (0.42x0.44)=0.1848 0.18 --> this is NOT twice the standard error (0.3), so probably don't keep
+  #See script here: https://www.dropbox.com/s/34u64ha6jxqbjvy/Sample%20R%20File%20for%20Qsorting.R?dl=0 for code for Humphrey's Rule
+#seventh option: Judgement based interpretation - used crib sheets to interpret and compare factor extractions of 3,4,5,6 - see Step Ten for crib sheet instructions
+
+#STEP NINE, creating crib sheets (using code from:https://www.dropbox.com/s/34u64ha6jxqbjvy/Sample%20R%20File%20for%20Qsorting.R?dl=0)
+state<-read.csv("Statements.csv",header=FALSE) #Read in the file with the statements
+temp1<-results$zsc_n #have to do this with 'results' for each extraction, so, helpful to run separate analysis with results3 - nfactor=3; results4 - nfactor=4 - and so forth, creating crib sheets for them one at a time, then comparing in excel 
+
+tempcrib<-list()
+crib<-list()
+for (i in 1:ncol(temp1)){
+  max<-which(temp1[,i]==max(temp1))
+  tempcrib[[1]]<-data.frame(max,state[max,1])
+  min<-which(temp1[,i]==min(temp1))
+  tempcrib[[2]]<-data.frame(min,state[min,1])
+  bigger<-rep(FALSE,nrow(temp1))
+  for(j in 1:nrow(temp1)){
+    bigger[j]<-ifelse(temp1[j,i]==max(temp1[j,])& temp1[j,i] != max(temp1) ,TRUE,FALSE)
+  }
+  tempcrib[[3]]<-data.frame(which(bigger==TRUE),state[which(bigger==TRUE),1],temp1[which(bigger==TRUE),i])
+  names(tempcrib[[3]])<-c("N","Statement","A")
+  smaller<-rep(FALSE,nrow(temp1))
+  for(j in 1:nrow(temp1)){
+    smaller[j]<-ifelse(temp1[j,i]==min(temp1[j,])& temp1[j,i] != min(temp1) ,TRUE,FALSE)
+  }
+  tempcrib[[4]]<-data.frame(which(smaller==TRUE),state[which(smaller==TRUE),1],temp1[which(smaller==TRUE),i])
+  names(tempcrib[[4]])<-c("N","Statement","A")
+  crib[[i]]<-tempcrib
+}
+
+print(crib) #FOR EACH FACTOR gives statements at maximum, at minimum, greater than other factors, less than other factors
+view (crib) #can't figure out how to export this, but used the view(crib) function to see results and move them to a legible table in excel
+
+#STEP TEN, manual flagging so that I can use a higher p-value to ID significant loadings
+factors <- 5 #set the number of factors to extract and rotate (did this with multiple extractions, but ultimatley settled on a 5 factor extraction, so this models that process)
+# The following runs Q analysis and keeps only the default factor loadings only :
+mloa <- qmethod(mydata, 
+                nfactors   = factors,
+                extraction = "PCA", 
+                rotation   = "varimax", 
+                forced     = TRUE)$loa
+mloa # Inspect the loadings
+# Automatic flagging:
+mflagged <- qflag(loa = mloa, nstat = 48) #nstat is number of statements in study
+mflagged # Inspect the automatic flags
+write.table(mflagged,"Factor5 auto flags.csv" ,sep=',')
+#Inspected auto flags in an excel file to manually flag any factors loading at or above 0.5
+#Four of the auto flags need to be changed, so I will do that manually:
+mflagged["WAS14", 4] <- TRUE
+mflagged["WAS15", 1] <- TRUE
+mflagged["GEN26", 1] <- FALSE
+mflagged["GEN28", 1] <- FALSE
+mflagged #check to see that the changes were incorporated correctly
+
+#STEP ELEVEN, run Q analysis again with modified loadings and flags
+results <- qzscores(mydata, 
+                    nfactors = factors, 
+                    forced   = TRUE,
+                    flagged  = mflagged, # Modified flags
+                    loa      = mloa) # Modified loadings
+results # See your results
+results$f_char$characteristics
+loa.and.flags(results)
+summary(results)
+write.table(results$zsc_n, "Factor5 factor scores.csv",sep=",") #export updated factor array as csv
+#Re-doing crib sheet with the updated, manually flagged analysis:
+temp1<-results$zsc_n 
+tempcrib<-list()
+crib<-list()
+for (i in 1:ncol(temp1)){
+  max<-which(temp1[,i]==max(temp1))
+  tempcrib[[1]]<-data.frame(max,state[max,1])
+  min<-which(temp1[,i]==min(temp1))
+  tempcrib[[2]]<-data.frame(min,state[min,1])
+  bigger<-rep(FALSE,nrow(temp1))
+  for(j in 1:nrow(temp1)){
+    bigger[j]<-ifelse(temp1[j,i]==max(temp1[j,])& temp1[j,i] != max(temp1) ,TRUE,FALSE)
+  }
+  tempcrib[[3]]<-data.frame(which(bigger==TRUE),state[which(bigger==TRUE),1],temp1[which(bigger==TRUE),i])
+  names(tempcrib[[3]])<-c("N","Statement","A")
+  smaller<-rep(FALSE,nrow(temp1))
+  for(j in 1:nrow(temp1)){
+    smaller[j]<-ifelse(temp1[j,i]==min(temp1[j,])& temp1[j,i] != min(temp1) ,TRUE,FALSE)
+  }
+  tempcrib[[4]]<-data.frame(which(smaller==TRUE),state[which(smaller==TRUE),1],temp1[which(smaller==TRUE),i])
+  names(tempcrib[[4]])<-c("N","Statement","A")
+  crib[[i]]<-tempcrib
+}
+print(crib)
+
+#STEP TWELVE: final analysis once no. of factors has been decided
+results <- qmethod(mydata, nfactors = 5)
+summary(results)
+results
+plot(results)
+# The rest of Step 12 is pulled from the cookbook, but I couldn't get the last line of code to work and don't think I need this, so not doing it
+# Put z-scores and factor scores together
+scores <- cbind(round(results$zsc, digits=2), results$zsc_n)
+nfactors <- ncol(results$zsc)
+col.order <- as.vector(rbind(1:nfactors, (1:nfactors)+nfactors))
+scores <- scores[col.order]
+scores
+# Order the table from highest to lowest z-scores for factor 1
+scores[order(scores$zsc_f1, decreasing = T),] #to order according to other factors, replace 'f1' for 'f2' etc. #I can't get this step from the cookbook to work, but don't think that I need it
+
+#STEP THIRTEEN, running distinguishing and consensus statements using function qdc()
+state<-read.csv("Statements.csv",header=FALSE) #read in csv of statements if not already done for crib sheets
+#function qdc() requires: qdc(dataset, nfactors, zsc (zscores),sed (standard error of differences) )
+zsc<-results$zsc #set dataframe to z scores
+sed<-results$f_char$sd_dif #set dataframe to standard error of differences
+qdc(mydata,factors,zsc,sed) #produces distinguishing and consensus statements
+results$qdc<-qdc(mydata,factors,zsc,sed) #label dataframe for qdc() product 
+results$qdc #displays full table of statements
+format(results$qdc, digits = 1, nsmall = 2) #to see results rounded 2 decimals
+roundedqdc<-format(results$qdc, digits = 1, nsmall = 2) #label variable of rounded version of qdc()
+write.table(roundedqdc, "Factor5 qdc statements rounded.csv",sep=",") #save results
+#To see breakdown of different elements of full table
+results$qdc[which(results$qdc$dist.and.cons == "Consensus"), ] # Consensus statements only
+results$qdc[which(results$qdc$dist.and.cons == "Distinguishes all"), ] # Statements distinguishing all factors only
+results$qdc[which(results$qdc$dist.and.cons == "Distinguishes f1 only"), ]# Statements distinguishing factor 1 (for results of > 2 factors)
+results$qdc[which(results$qdc$dist.and.cons == "Distinguishes f1 only"), ] # Statements distinguishing factor 1 (for results of > 2 factors)
+results$qdc[which(results$qdc$dist.and.cons == "Distinguishes f2 only"), ] #can do this for all 5 factors if necessary, but results are shown in the full table
+
+#STEP FOURTEEN, saving & cleaning the results
+save(results, file = "myresults.Rdata")
+#To save various results as csv files, can do with more variables - see Zabala pg 167 for list of variables
+write.csv(results$zsc,   file = "zscores.csv") #Table of z-scores
+write.csv(results$zsc_n, file = "factorscores.csv") #Table of factor scores
+write.csv(results$loa,   file = "loadings.csv") #Table of Q-sort factor loadings
+export.qm(results, file = "myreport.txt", style = "R") #report of all results in text file 
+#Cleaning up the environment pane to get rid of old variables and objects created when running different versions of the tests
+remove(df_1)
+remove (df_2) #etc etc 
